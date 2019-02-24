@@ -77,7 +77,7 @@ class FileStorage(object):
         return self.dict[key]
 
     
-    def contains(url):
+    def contains(self, url):
         self.check_open()
         return url in self.dict
 
