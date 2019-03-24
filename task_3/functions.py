@@ -12,6 +12,7 @@ from collections import defaultdict
 from keras.models import Sequential, Model
 from keras.losses import mean_absolute_error
 from keras.layers import Embedding, LSTM, Bidirectional, Dense, Input, Masking, Lambda, concatenate
+from keras.activations import sigmoid
 import keras.backend as K
 from keras.optimizers import Adam
 from keras.callbacks import LambdaCallback, LearningRateScheduler, Callback
@@ -20,6 +21,7 @@ BATCH_SIZE = 64
 TEST_DATA_SIZE = 10000
 TRAIN_DATA_SIZE = 490000
 HIDDEN_SIZE = 256
+MAX_QUERY_LEN_HARD = 150
 
 def get_max_lens(filename):
     max_query_len, max_document_len = -1, -1
@@ -71,10 +73,10 @@ def make_dense_input_from_lines(lines, query_dict_size, document_dict_size):
 
 def make_lstm_dense_input_from_lines(lines, max_query_len, document_dict_size):
     document_indices_axis_0, document_indices_axis_1, document_values = [], [], []
-    query_batch = np.zeros([len(lines), max_query_len])
+    query_batch = np.zeros([len(lines), MAX_QUERY_LEN_HARD])
     for i, line in enumerate(lines):
         query, document = line.split("\t")
-        query_words = list(map(int, query.split()))
+        query_words = list(map(int, query.split()))[:MAX_QUERY_LEN_HARD]
         document_words = Counter(map(int, document.split()))
         
         query_batch[i, :len(query_words)] = query_words
@@ -126,6 +128,10 @@ def my_cosine_proximity(y_true, y_pred):
     mean_pred = K.mean(y_pred)
     return -K.mean((y_pred - mean_pred) * y_true)
 
+def logloss(y_true, y_pred):
+    labels = (y_true + 1) / 2
+    return -K.mean(labels * K.log(y_pred) + (1 - labels) * K.log(1 - y_pred))
+
 def get_positive_mask(y_true):
     return (y_true + 1) / 2
 
@@ -167,6 +173,9 @@ def normalize(embedding):
 def dot_product(embeddings):
     return K.sum(embeddings[0] * embeddings[1], axis=-1)
 
+def proba_score(embeddings):
+    return K.sigmoid(dot_product(embeddings))
+
 def reshape_to_prediction(score):
     return K.reshape(score, (-1, 1))
 
@@ -189,13 +198,13 @@ def make_dense_branch(tensor, dense_num, hidden_size, dict_size, activation):
     return Lambda(normalize)(tensor)  # shape: (BATCH_SIZE, hidden_size)
 
 def make_compiled_model(input_1, input_2, embedding_1, embedding_2):
-    score = Lambda(dot_product)([embedding_1, embedding_2])
+    score = Lambda(proba_score)([embedding_1, embedding_2])
     prediction = Lambda(reshape_to_prediction, name="output")(score)
 
     model = Model(inputs=[input_1, input_2], outputs=prediction)
     model.compile(
         Adam(),
-        loss=loss,
+        loss=logloss,
         metrics=[mean_positive_score, mean_negative_score, mean_positive_var, mean_negative_var, 'acc']
     )
     return model
@@ -238,7 +247,7 @@ def make_lstm_dense_model(document_dict_size,
                      activation,
                      hidden_size):
     # shape: (BATCH_SIZE, QUERY_DICT_SIZE)
-    query_input = Input(shape=(max_query_len,), name="query_input")
+    query_input = Input(shape=(MAX_QUERY_LEN_HARD,), name="query_input")
     query_embedding = make_lstm_branch(
         query_input,
         query_lstm_num,
@@ -375,5 +384,5 @@ def train_epoch(model, batches_to_sample_negatives, epoch, input_from_lines_func
         epochs=1,
         verbose=1,
         initial_epoch=0,
-        callbacks=[сallback][:0]
+        callbacks=[сallback]
     )
