@@ -86,11 +86,11 @@ def make_data_generator(positive_generator, negative_generator):
             {'output': labels}
         )
 
-def make_batch(positive_lines_generator, negative_lines_generator, batch_size):
-    lines = [next(positive_lines_generator) for i in range(batch_size)]
-    lines += [next(negative_lines_generator) for i in range(batch_size)]
+def make_batch(positive_line, negative_lines):
+    lines = [positive_line] + negative_lines
     inputs = make_input_from_lines(lines)
-    labels = np.concatenate([np.ones(batch_size), -1 * np.ones(batch_size)]).reshape([-1, 1])
+    labels = np.zeros(1 + len(negative_lines))
+    labels[0] = 1
     return inputs, {'output': labels}
 
 def make_input_from_lines(lines):
@@ -135,8 +135,8 @@ class DataGenerator:
         inputs = make_input_from_lines(lines)
         predictions = -self._model.predict(inputs).reshape(-1)
         indices = np.argsort(predictions)[:self._batch_size]
-        negative_lines = np.array(lines)[indices]
-        return make_batch(self._positive_generator, (line for line in negative_lines), self._batch_size)
+        negative_lines = list(np.array(lines)[indices])
+        return make_batch(next(self._positive_generator), negative_lines)
     
 def make_generator(data_generator):
     while True:
@@ -145,6 +145,10 @@ def make_generator(data_generator):
 def my_cosine_proximity(y_true, y_pred):
     mean_pred = K.mean(y_pred)
     return -K.mean((y_pred - mean_pred) * y_true)
+
+def ranking_loss(y_true, y_pred):
+    positive_prediction = mean_positive_score(y_true, y_pred)
+    return -K.mean(y_pred - positive_prediction)
 
 def mean_positive_score(y_true, y_pred):
     filter_mult = (y_true + 1) / 2
@@ -185,7 +189,7 @@ def reshape_to_prediction(score):
     return K.reshape(score, (-1, 1))
 
 def loss(y_true, y_pred):
-    return 0.01 * mean_absolute_error(y_true, y_pred) + my_cosine_proximity(y_true, y_pred)
+    return ranking_loss(y_true, y_pred)
     
 def make_lstm_branch(tensor, lstm_num, dense_num, hidden_size, dict_size, activation):
     tensor = Masking(mask_value=0)(tensor)
@@ -209,7 +213,7 @@ def make_compiled_model(input_1, input_2, embedding_1, embedding_2):
     model = Model(inputs=[input_1, input_2], outputs=prediction)
     model.compile(
         Adam(),
-        loss=my_cosine_proximity,
+        loss=loss,
         metrics=[mean_positive_score, mean_negative_score, mean_positive_var, mean_negative_var, 'acc']
     )
     return model
@@ -273,7 +277,7 @@ def make_dense_not_dssm_model(document_dict_size,
     model = Model(inputs=[query_input, document_input], outputs=prediction)
     model.compile(
         Adam(),
-        loss=my_cosine_proximity,
+        loss=loss,
         metrics=[mean_positive_score, mean_negative_score, mean_positive_var, mean_negative_var, 'acc']
     )
     return model
