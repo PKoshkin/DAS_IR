@@ -16,12 +16,9 @@ import keras.backend as K
 from keras.optimizers import Adam
 from keras.callbacks import LambdaCallback, LearningRateScheduler, Callback
 
-BATCH_SIZE = 32
+BATCH_SIZE = 64
 TEST_DATA_SIZE = 10000
 TRAIN_DATA_SIZE = 490000
-QUERY_DICT_SIZE = 247074
-DOCUMENT_DICT_SIZE = 583954
-ACTIVATION = 'relu'
 HIDDEN_SIZE = 256
 
 def get_max_lens(filename):
@@ -42,58 +39,7 @@ def cycle_file(filename):
         with open(filename) as f:
             yield from f
             
-def make_seq_batches_generator(filename, batch_size, max_query_len, max_document_len):
-    with open(filename) as handler:
-        while True:
-            query_batch = np.zeros([batch_size, max_query_len])
-            docment_batch = np.zeros([batch_size, max_document_len])
-            for i in range(batch_size):
-                line = next(handler)
-                query, document = line.split("\t")
-                query = list(map(int, query.split()))
-                document = list(map(int, document.split()))
-                query_batch[i, :len(query)] = query
-                docment_batch[i, :len(document)] = document
-            yield query_batch, docment_batch
-
-def make_non_seq_batches_generator(filename, batch_size):
-    with open(filename) as handler:
-        while True:
-            query_batch = np.zeros([batch_size, QUERY_DICT_SIZE])
-            docment_batch = np.zeros([batch_size, DOCUMENT_DICT_SIZE])
-            for i in range(batch_size):
-                line = next(handler)
-                query, document = line.split("\t")
-                query = list(map(int, query.split()))
-                document = list(map(int, document.split()))
-                for word in query:
-                    query_batch[i, word] += 1
-                for word in document:
-                    docment_batch[i, word] += 1
-            yield query_batch, docment_batch
-
-def make_data_generator(positive_generator, negative_generator):
-    while True:
-        positive_query_batch, positive_docment_batch = next(positive_generator)
-        negative_query_batch, negative_docment_batch = next(negative_generator)
-        query_input = np.concatenate([positive_query_batch, negative_query_batch], axis=0)
-        document_input = np.concatenate([positive_docment_batch, negative_docment_batch], axis=0)
-        labels = np.concatenate(
-            [np.ones(len(positive_query_batch)), -1 * np.ones(len(negative_query_batch))
-        ]).reshape([-1, 1])
-        yield (
-            {'query_input': query_input, 'document_input': document_input},
-            {'output': labels}
-        )
-
-def make_batch(positive_line, negative_lines):
-    lines = [positive_line] + negative_lines
-    inputs = make_input_from_lines(lines)
-    labels = np.zeros(1 + len(negative_lines))
-    labels[0] = 1
-    return inputs, {'output': labels}
-
-def make_input_from_lines(lines):
+def make_dense_input_from_lines(lines, query_dict_size, document_dict_size):
     query_indices_axis_0, document_indices_axis_0 = [], []
     query_indices_axis_1, document_indices_axis_1 = [], []
     query_values, document_values = [], []
@@ -113,30 +59,64 @@ def make_input_from_lines(lines):
 
     query_batch = csr_matrix(
         (query_values, (query_indices_axis_0, query_indices_axis_1)),
-        shape=(len(lines), QUERY_DICT_SIZE)
+        shape=(len(lines), query_dict_size)
     )
     docment_batch = csr_matrix(
         (document_values, (document_indices_axis_0, document_indices_axis_1)),
-        shape=(len(lines), DOCUMENT_DICT_SIZE)
+        shape=(len(lines), document_dict_size)
     )
 
     return {'query_input': query_batch, 'document_input': docment_batch}
     
+
+def make_lstm_dense_input_from_lines(lines, max_query_len, document_dict_size):
+    document_indices_axis_0, document_indices_axis_1, document_values = [], [], []
+    query_batch = np.zeros([len(lines), max_query_len])
+    for i, line in enumerate(lines):
+        query, document = line.split("\t")
+        query_words = list(map(int, query.split()))
+        document_words = Counter(map(int, document.split()))
+        
+        query_batch[i, :len(query_words)] = query_words
+
+        for word in document_words:
+            document_indices_axis_0.append(i)
+            document_indices_axis_1.append(word)
+            document_values.append(document_words[word])
+
+    docment_batch = csr_matrix(
+        (document_values, (document_indices_axis_0, document_indices_axis_1)),
+        shape=(len(lines), document_dict_size)
+    )
+
+    return {'query_input': query_batch, 'document_input': docment_batch}
+
 class DataGenerator:
-    def __init__(self, positive_filename, negative_filename, model, batch_size, negative_candidates_num):
+    def __init__(self, positive_filename, negative_filename, model, positives_num, negatives_num, negative_candidates_num, make_input_from_lines_function):
         self._positive_generator = cycle_file(positive_filename)
         self._negative_generator = cycle_file(negative_filename)
         self._model = model
-        self._batch_size = batch_size
+        self._positives_num = positives_num
+        self._negatives_num = negatives_num 
         self._negative_candidates_num = negative_candidates_num
+        self._input_from_lines = make_input_from_lines_function
 
     def make_batch(self):
-        lines = [next(self._negative_generator) for _ in range(self._negative_candidates_num)]
-        inputs = make_input_from_lines(lines)
-        predictions = -self._model.predict(inputs).reshape(-1)
-        indices = np.argsort(predictions)[:self._batch_size]
-        negative_lines = list(np.array(lines)[indices])
-        return make_batch(next(self._positive_generator), negative_lines)
+        negative_lines = [next(self._negative_generator) for _ in range(self._negative_candidates_num)]
+        test_inputs = self._input_from_lines(negative_lines)
+        predictions = -self._model.predict(test_inputs).reshape(-1)
+        indices = np.argsort(predictions)[:self._negatives_num]
+        negative_lines = list(np.array(negative_lines)[indices])
+
+        positive_lines = [next(self._positive_generator) for _ in range(self._positives_num)]
+
+        inputs = self._input_from_lines(positive_lines + negative_lines)
+        labels = np.concatenate(
+            [np.ones(len(positive_lines)), -1 * np.ones(len(negative_lines))],
+            axis=0
+        )
+
+        return inputs, {'output': labels}
     
 def make_generator(data_generator):
     while True:
@@ -146,38 +126,40 @@ def my_cosine_proximity(y_true, y_pred):
     mean_pred = K.mean(y_pred)
     return -K.mean((y_pred - mean_pred) * y_true)
 
+def get_positive_mask(y_true):
+    return (y_true + 1) / 2
+
+def get_negative_mask(y_true):
+    return (1 - y_true) / 2
+
 def ranking_loss(y_true, y_pred):
     positive_prediction = mean_positive_score(y_true, y_pred)
-    return -K.mean(y_pred - positive_prediction)
+    positives_num = K.sum(get_positive_mask(y_true))
+    negatives_num = K.sum(get_negative_mask(y_true))
+    
+    return K.mean(y_pred - positive_prediction) * negatives_num / (positives_num + negatives_num)
 
 def mean_positive_score(y_true, y_pred):
-    filter_mult = (y_true + 1) / 2
-    return K.mean(y_pred * filter_mult)
+    positives_num = K.sum(get_positive_mask(y_true))
+    negatives_num = K.sum(get_negative_mask(y_true))
+    return K.mean(y_pred * get_positive_mask(y_true)) * positives_num / (positives_num + negatives_num)
 
 def mean_positive_var(y_true, y_pred):
     mean_positive = mean_positive_score(y_true, y_pred)
-    filter_mult = (y_true + 1) / 2
-    return K.mean((y_pred * filter_mult - mean_positive) ** 2)
-
-def get_pred(y_true, y_pred):
-    mean_positive = mean_positive_score(y_true, y_pred)
-    mean_negative = mean_negative_score(y_true, y_pred)
-    
-    threshold = (mean_positive + mean_negative) / 2
-    
-    positive_mult = (y_true + 1) / 2
-    negative_mult = (1 - y_true) / 2
-
-    return K.mean((y_pred * filter_mult - mean_positive) ** 2)
+    positives_num = K.sum(get_positive_mask(y_true))
+    negatives_num = K.sum(get_negative_mask(y_true))
+    return K.mean((y_pred * get_positive_mask(y_true) - mean_positive) ** 2) * positives_num / (positives_num + negatives_num)
 
 def mean_negative_score(y_true, y_pred):
-    filter_mult = (1 - y_true) / 2
-    return K.mean(y_pred * filter_mult)
+    positives_num = K.sum(get_positive_mask(y_true))
+    negatives_num = K.sum(get_negative_mask(y_true))
+    return K.mean(y_pred * get_negative_mask(y_true)) * negatives_num / (positives_num + negatives_num)
 
 def mean_negative_var(y_true, y_pred):
     mean_negative = mean_negative_score(y_true, y_pred)
-    filter_mult = (1 - y_true) / 2
-    return K.mean((y_pred * filter_mult - mean_negative) ** 2)
+    positives_num = K.sum(get_positive_mask(y_true))
+    negatives_num = K.sum(get_negative_mask(y_true))
+    return K.mean((y_pred * get_negative_mask(y_true) - mean_negative) ** 2) * negatives_num / (positives_num + negatives_num)
 
 def normalize(embedding):
     return K.l2_normalize(embedding, axis=-1)
@@ -189,7 +171,7 @@ def reshape_to_prediction(score):
     return K.reshape(score, (-1, 1))
 
 def loss(y_true, y_pred):
-    return ranking_loss(y_true, y_pred)
+    return my_cosine_proximity(y_true, y_pred)
     
 def make_lstm_branch(tensor, lstm_num, dense_num, hidden_size, dict_size, activation):
     tensor = Masking(mask_value=0)(tensor)
@@ -246,41 +228,38 @@ def make_dense_model(document_dict_size,
 
     return make_compiled_model(query_input, document_input, query_embedding, document_embedding)
     
-def make_dense_not_dssm_model(document_dict_size,
-                              document_dense_num,
-                              query_dict_size,
-                              query_dense_num,
-                              common_dense_num,
-                              activation,
-                              hidden_size):
+
+def make_lstm_dense_model(document_dict_size,
+                     document_dense_num,
+                     query_dict_size,
+                     query_lstm_num,
+                     query_dense_num,
+                     max_query_len,
+                     activation,
+                     hidden_size):
     # shape: (BATCH_SIZE, QUERY_DICT_SIZE)
-    query_input = Input(shape=(query_dict_size,), sparse=True, name="query_input")
-    query_tensor = query_input
-    for i in range(query_dense_num):
-        # shape: (BATCH_SIZE, hidden_size)
-        query_tensor = Dense(hidden_size, activation=activation)(query_tensor)
+    query_input = Input(shape=(max_query_len,), name="query_input")
+    query_embedding = make_lstm_branch(
+        query_input,
+        query_lstm_num,
+        query_dense_num,
+        hidden_size,
+        query_dict_size,
+        activation
+    )
     
     # shape: (BATCH_SIZE, document_dict_size)
     document_input = Input(shape=(document_dict_size,), sparse=True, name="document_input")
-    document_tensor = document_input
-    for i in range(document_dense_num):
-        # shape: (BATCH_SIZE, hidden_size)
-        document_tensor = Dense(hidden_size, activation=activation)(document_tensor)
-
-    # shape: (BATCH_SIZE, hidden_size * 2)
-    concatenate_tensor = concatenate([query_tensor, document_tensor], axis=1)
-    for i in range(common_dense_num):
-        # shape: (BATCH_SIZE, hidden_size)
-        concatenate_tensor = Dense(hidden_size * 2, activation=activation)(concatenate_tensor)
-    prediction = Dense(1, activation='sigmoid', name="output")(concatenate_tensor)
-
-    model = Model(inputs=[query_input, document_input], outputs=prediction)
-    model.compile(
-        Adam(),
-        loss=loss,
-        metrics=[mean_positive_score, mean_negative_score, mean_positive_var, mean_negative_var, 'acc']
+    document_embedding = make_dense_branch(
+        document_input,
+        document_dense_num,
+        hidden_size,
+        document_dict_size,
+        activation
     )
-    return model
+
+    return make_compiled_model(query_input, document_input, query_embedding, document_embedding)
+
 
 class EvaluateCallback(Callback):
     def __init__(self,
@@ -348,29 +327,35 @@ class EvaluateCallback(Callback):
         self._epoch += 1
 
 
-def train_epoch(model, batches_to_sample_negatives, epoch):
+def train_epoch(model, batches_to_sample_negatives, epoch, input_from_lines_function):
     train_data_generator = make_generator(DataGenerator(
-        "positive_train_data.tsv",
-        "negative_train_data.tsv",
+        "freq_positive_train_data.tsv",
+        "freq_negative_train_data.tsv",
         model,
         BATCH_SIZE,
-        BATCH_SIZE * batches_to_sample_negatives
+        BATCH_SIZE,
+        BATCH_SIZE * batches_to_sample_negatives,
+        input_from_lines_function
     ))
 
     val_data_generator = make_generator(DataGenerator(
-        "positive_train_data.tsv",
-        "negative_train_data.tsv",
+        "freq_positive_train_data.tsv",
+        "freq_negative_train_data.tsv",
         model,
         BATCH_SIZE,
-        BATCH_SIZE * batches_to_sample_negatives
+        BATCH_SIZE,
+        BATCH_SIZE * batches_to_sample_negatives,
+        input_from_lines_function
     ))
 
     test_data_generator = make_generator(DataGenerator(
-        "positive_train_data_10K.tsv",
-        "negative_train_data_10K.tsv",
+        "freq_positive_train_data_10K.tsv",
+        "freq_negative_train_data_10K.tsv",
         model,
         BATCH_SIZE,
-        BATCH_SIZE * batches_to_sample_negatives
+        BATCH_SIZE,
+        BATCH_SIZE * batches_to_sample_negatives,
+        input_from_lines_function
     ))
     сallback = EvaluateCallback(
          model,
@@ -390,5 +375,5 @@ def train_epoch(model, batches_to_sample_negatives, epoch):
         epochs=1,
         verbose=1,
         initial_epoch=0,
-        callbacks=[сallback]
+        callbacks=[сallback][:0]
     )
