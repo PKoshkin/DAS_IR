@@ -401,7 +401,6 @@ class EvaluateCallback(Callback):
         self._validation_steps = validation_steps
         self._validation_batch_divider = validation_batch_divider
         self._epoch = 0
-        
 
         self.history = {}
         for name in self._model.metrics_names:
@@ -450,7 +449,7 @@ class EvaluateCallback(Callback):
         self._epoch += 1
 
 
-def train_epoch(model, batches_to_sample_negatives, epoch, positive_file, negative_file, input_from_lines_function):
+def train_epoch(model, batches_to_sample_negatives, epoch, positive_file, negative_file, positive_file_test, negative_file_test, input_from_lines_function):
     train_data_generator = make_generator(DataGenerator(
         positive_file,
         negative_file,
@@ -472,8 +471,8 @@ def train_epoch(model, batches_to_sample_negatives, epoch, positive_file, negati
     ))
 
     test_data_generator = make_generator(DataGenerator(
-        positive_file,
-        negative_file,
+        positive_file_test,
+        negative_file_test,
         model,
         BATCH_SIZE,
         BATCH_SIZE,
@@ -487,7 +486,7 @@ def train_epoch(model, batches_to_sample_negatives, epoch, positive_file, negati
          val_data_generator,
          test_data_generator,
          int(TEST_DATA_SIZE / BATCH_SIZE),
-         int(TEST_DATA_SIZE / BATCH_SIZE) * 10
+         int(TRAIN_DATA_SIZE / 5)
     )
     x = next(train_data_generator)
     y = next(val_data_generator)
