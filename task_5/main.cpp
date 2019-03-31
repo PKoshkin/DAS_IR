@@ -70,14 +70,14 @@ int main() {
         std::uint64_t hash = *(hashes.begin());
         int group_size = 1;
         std::set<std::uint64_t> group;
-		group.insert(hash);
+        group.insert(hash);
 
         for (int i = 0; i < PARTS_NUM; ++i) {
             std::uint16_t part = get_part(hash, i);
             for (std::uint64_t dublicate_candidate : hashes_by_parts[i][part]) {
                 int distance = calculate_distance(dublicate_candidate, hash);
                 if (distance < 4) {
-					group.insert(dublicate_candidate);
+                    group.insert(dublicate_candidate);
                 }
             }
         }
