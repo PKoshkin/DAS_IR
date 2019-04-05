@@ -68,7 +68,6 @@ int main() {
             log_file_stream << "Hashes to process: " << hashes.size() << std::endl;
         }
         std::uint64_t hash = *(hashes.begin());
-        int group_size = 1;
         std::set<std::uint64_t> group;
         group.insert(hash);
 
