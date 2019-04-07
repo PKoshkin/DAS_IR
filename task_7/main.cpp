@@ -7,6 +7,8 @@
 
 
 const std::size_t HANDLING_BITS = 3;
+const std::size_t BITS_IN_FIRST_BYTE = CHAR_BIT - HANDLING_BITS;
+typedef unsigned char Byte;
 
 
 template<typename T>
@@ -25,18 +27,21 @@ std::size_t get_bytes_number(T data) {
 
 
 template<typename T>
-void add_object(T data, std::vector<char>& bytes) {
+void add_object(T data, std::vector<Byte>& bytes) {
     std::size_t bytes_number = get_bytes_number(data);
-    char* data_pointer = (char*)&data;
-    for (std::size_t i = 0; i < bytes_number; ++i) {
+    Byte* data_pointer = (Byte*)&data;
+
+    Byte bytes_number_bits = ((bytes_number - 1) << BITS_IN_FIRST_BYTE);
+    bytes.push_back(bytes_number_bits | data_pointer[bytes_number - 1]);
+    for (int i = bytes_number - 2; i >= 0; --i) {
         bytes.push_back(data_pointer[i]);
     }
 }
 
 
 template<typename T>
-std::vector<char> encode(const T* data, std::size_t count) {
-    std::vector<char> bytes;
+std::vector<Byte> encode(const T* data, std::size_t count) {
+    std::vector<Byte> bytes;
     for (std::size_t i = 0; i < count; ++i) {
         add_object(data[i], bytes);
     }
@@ -45,13 +50,20 @@ std::vector<char> encode(const T* data, std::size_t count) {
 
 
 template<typename T>
-std::size_t read_object(const char* data, std::vector<T>& objects) {
-    std::size_t bytes_number = (data[0] >> (CHAR_BIT - HANDLING_BITS)) + 1;
-    return 0;
+std::size_t read_object(const Byte* data, std::vector<T>& objects) {
+    std::size_t bytes_number = (data[0] >> BITS_IN_FIRST_BYTE) + 1;
+
+    T object = data[0] & (UCHAR_MAX >> HANDLING_BITS);
+    for (size_t i = 1; i < bytes_number; ++i) {
+        object <<= CHAR_BIT;
+        object += data[i];
+    }
+    objects.push_back(object);
+    return bytes_number;
 }
 
 template<typename T>
-std::vector<T> decode(const char* data, std::size_t length) {
+std::vector<T> decode(const Byte* data, std::size_t length) {
     std::vector<T> objects;
     std::size_t bytes_index = 0;
     while (bytes_index < length) {
@@ -61,24 +73,13 @@ std::vector<T> decode(const char* data, std::size_t length) {
 }
 
 int main () {
-
-    std::uint64_t number;
-    std::cin >> number;
-
-    char* char_p = (char*)&number;
-    for (std::size_t i = 0; i < sizeof(std::uint64_t); ++i) {
-        std::cout << std::bitset<8>(char_p[i]) << std::endl;
-    }
-    std::cout << "----------------------" << std::endl;
+    std::uint64_t numbers[2];
+    std::cin >> numbers[0] >> numbers[1];
 
 
-
-
-
-    std::cout << "number: " << number << std::endl;
-    std::vector<char> bytes = encode(&number, 1);
+    std::vector<Byte> bytes = encode(numbers, 2);
     for (int i = 0; i < bytes.size(); ++i) {
-        std::cout << "char " << i << ": " << (int)bytes[i] << std::endl;
+        std::cout << "Byte " << i << ": " << (int)(Byte)bytes[i] << std::endl;
     }
     std::cout << "bytes.size(): " << bytes.size() << std::endl;
     std::vector<std::uint64_t> number_decode = decode<std::uint64_t>(bytes.data(), bytes.size());
