@@ -7,72 +7,30 @@
 
 
 const std::size_t HANDLING_BITS = 3;
-const std::size_t BITS_IN_FIRST_BYTE = CHAR_BIT - HANDLING_BITS;
 
 
 template<typename T>
-class BitsHandler {
-private:
-    T data;
-    std::size_t significant_bits_number;
-    std::size_t bytes_number;
-    std::size_t last_byte_bits;
-
-public:
-    BitsHandler(T in_data) : data(in_data), significant_bits_number(0), bytes_number(0) {
-        while (in_data > 0) {
-            in_data >>= 1;
-            ++significant_bits_number;
-        }
-        if (significant_bits_number <= BITS_IN_FIRST_BYTE) {
-            bytes_number = 1;
-            last_byte_bits = significant_bits_number;
-        } else {
-            std::size_t full_bytes_bits = significant_bits_number - BITS_IN_FIRST_BYTE;
-            bytes_number = 1 + full_bytes_bits / CHAR_BIT;
-            last_byte_bits = full_bytes_bits % CHAR_BIT;
-
-            if (full_bytes_bits % CHAR_BIT > 0) {
-                ++bytes_number;
-            } else {
-                last_byte_bits = CHAR_BIT;
-            }
-        }
-        std::cout << "bytes number: " << bytes_number << std::endl;
-        std::cout << "significant_bits_number: " << significant_bits_number << std::endl;
-        std::cout << "last_byte_bits  : " << last_byte_bits << std::endl;
+std::size_t get_bytes_number(T data) {
+    std::size_t significant_bits_number = 0;
+    while (data > 0) {
+        data >>= 1;
+        ++significant_bits_number;
     }
-
-    char get_byte(size_t index) {
-        if (significant_bits_number <= BITS_IN_FIRST_BYTE) {
-            assert(index == 0);
-            unsigned char bytes_number_bits = ((bytes_number - 1) << BITS_IN_FIRST_BYTE);
-            std::cout << "bytes_number_bits sgn<5: " << (int)bytes_number_bits << std::endl;
-            return  bytes_number_bits | data;
-        }
-        if (index == 0) {
-            unsigned char bytes_number_bits = ((bytes_number - 1) << BITS_IN_FIRST_BYTE);
-            std::cout << "bytes_number_bits: " << (int)bytes_number_bits << std::endl;
-            return bytes_number_bits | (data >> (significant_bits_number - BITS_IN_FIRST_BYTE));
-        } else if (index == bytes_number - 1) {
-            return (UCHAR_MAX >> (CHAR_BIT - last_byte_bits)) & data;
-        } else {
-            return UCHAR_MAX & (data >> (significant_bits_number - BITS_IN_FIRST_BYTE - CHAR_BIT * index));
-        }
+    std::size_t bytes_to_encode_number = 1;
+    while ((8 * bytes_to_encode_number - 3) < significant_bits_number) {
+        ++bytes_to_encode_number;
     }
-
-    void add_bytes(std::vector<char>& bytes) {
-        for (size_t index = 0; index < bytes_number; ++index) {
-            bytes.push_back(get_byte(index));
-        }
-    }
-};
+    return bytes_to_encode_number;
+}
 
 
 template<typename T>
 void add_object(T data, std::vector<char>& bytes) {
-    BitsHandler bites_handler(data);
-    bites_handler.add_bytes(bytes);
+    std::size_t bytes_number = get_bytes_number(data);
+    char* data_pointer = (char*)&data;
+    for (std::size_t i = 0; i < bytes_number; ++i) {
+        bytes.push_back(data_pointer[i]);
+    }
 }
 
 
@@ -86,40 +44,10 @@ std::vector<char> encode(const T* data, std::size_t count) {
 }
 
 
-std::size_t get_significant_digits_num(char byte) {
-    std::size_t counter = 0;
-
-    std::cout << "get_significant_digits_num byte: " << (int)byte << std::endl;
-
-    while (byte > 0) {
-        byte >>= 1;
-        ++counter;
-    }
-    return counter;
-}
-
-
 template<typename T>
 std::size_t read_object(const char* data, std::vector<T>& objects) {
-    std::size_t bytes_number = (data[0] >> BITS_IN_FIRST_BYTE) + 1;
-    T object = 0;
-
-    //std::cout << "bytes number in read_object: " << bytes_number << std::endl;
-
-    object += data[0] & (UCHAR_MAX >> HANDLING_BITS);
-    for (size_t i = 1; i < bytes_number; ++i) {
-        std::cout << "object before: " << object << std::endl;
-        if (i == 1) {
-            object <<= BITS_IN_FIRST_BYTE;
-        } else {
-            object <<= CHAR_BIT;
-        }
-        object |= data[i];
-        std::cout << "object after: " << object << std::endl;
-    }
-
-    objects.push_back(object);
-    return bytes_number;
+    std::size_t bytes_number = (data[0] >> (CHAR_BIT - HANDLING_BITS)) + 1;
+    return 0;
 }
 
 template<typename T>
