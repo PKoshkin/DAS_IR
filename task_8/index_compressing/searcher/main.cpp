@@ -11,6 +11,8 @@
 #include <sstream>
 #include <iterator>
 
+#include "../varint.h"
+
 std::vector<std::string> split_string(const std::string& str) {
     std::stringstream stream(str);
 
@@ -47,7 +49,14 @@ public:
         index.read(reinterpret_cast<char*>(res.data()),
                    offset_and_length.second);
 
-        return res;
+        std::vector<uint32_t> decoded = decode(res.data(), res.size());
+        std::vector<uint32_t> delta_decoded(decoded.size());
+        std::vector<uint32_t> delta_decoded.push_back(decoded[0]);
+        for (int i = 1; i < decoded.size(); ++i) {
+            delta_decoded.push_back(decoded[i]);
+        }
+
+        return delta_decoded;
     }
 
     std::vector<uint32_t> intersect_posting_list(const std::vector<std::string>& words) const {
