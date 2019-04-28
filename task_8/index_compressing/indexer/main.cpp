@@ -9,6 +9,8 @@
 #include <exception>
 #include <stdexcept>
 
+#include "../varint.h"
+
 int main(void) {
     std::unordered_map<std::string, std::vector<uint32_t>> index;
     std::unordered_map<uint32_t, std::string> docid_to_url;
@@ -53,17 +55,25 @@ int main(void) {
         for (const auto& p : index) {
             const std::string& word = p.first;
             const std::vector<uint32_t>& posting = p.second;
+            const std::vector<uint32_t> delta_encoded_posting;
+            delta_encoded_posting.push_back(posting[0]);
+            for (int i = 1; i < posting.size(); ++i) {
+                delta_encoded_posting.push_back(posting[i] - posting[i - 1]);
+            }
+            std::vector<Byte> varint_encoded_posting = encode(delta_encoded_posting.data(), delta_encoded_posting.size());
 
             const uint32_t current_position = output.tellp();
 
-            output.write(reinterpret_cast<const char*>(posting.data()),
-                         posting.size() * sizeof(uint32_t));
+            output.write(
+                reinterpret_cast<const char*>(varint_encoded_posting.data()),
+                varint_encoded_posting.size() * sizeof(uint32_t)
+            );
 
             const uint32_t next_position = output.tellp();
 
             const uint32_t length = next_position - current_position;
 
-            if (length != posting.size() * sizeof(uint32_t)) {
+            if (length != varint_encoded_posting.size() * sizeof(uint32_t)) {
                 throw std::logic_error("error while writing index");
             }
 
