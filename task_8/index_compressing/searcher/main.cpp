@@ -46,7 +46,7 @@ public:
         std::vector<Byte> bytes(offset_and_length.second);
 
         index.seekg(offset_and_length.first);
-        index.read(reinterpret_cast<Byte*>(bytes.data()),
+        index.read(reinterpret_cast<char*>(bytes.data()),
                    offset_and_length.second);
 
         std::vector<uint32_t> decoded = decode<uint32_t>(bytes.data(), bytes.size());

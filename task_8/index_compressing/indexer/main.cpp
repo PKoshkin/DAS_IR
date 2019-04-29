@@ -65,7 +65,7 @@ int main(void) {
             const uint32_t current_position = output.tellp();
 
             output.write(
-                reinterpret_cast<Byte*>(varint_encoded_posting.data()),
+                reinterpret_cast<char*>(varint_encoded_posting.data()),
                 varint_encoded_posting.size() * sizeof(Byte)
             );
 
