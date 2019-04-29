@@ -7,7 +7,7 @@
 
 const std::size_t HANDLING_BITS = 3;
 const std::size_t BITS_IN_FIRST_BYTE = CHAR_BIT - HANDLING_BITS;
-typedef char Byte;
+typedef unsigned char Byte;
 
 
 template<typename T>
@@ -44,11 +44,6 @@ std::vector<Byte> encode(const T* data, std::size_t count) {
     for (std::size_t i = 0; i < count; ++i) {
         add_object(data[i], bytes);
     }
-    /*
-    for (int i = 0; i < bytes.size(); ++i) {
-        std::cout << "byte[" << i << "]=" << (int)bytes[i] << std::endl;
-    }
-    */
     return bytes;
 }
 
