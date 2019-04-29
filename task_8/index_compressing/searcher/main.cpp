@@ -49,9 +49,11 @@ public:
         index.read(reinterpret_cast<char*>(res.data()),
                    offset_and_length.second);
 
-        std::vector<uint32_t> decoded = decode(res.data(), res.size());
+        Byte* bytes = reinterpret_cast<Byte*>(res.data());
+
+        std::vector<uint32_t> decoded = decode<uint32_t>(bytes, res.size());
         std::vector<uint32_t> delta_decoded(decoded.size());
-        std::vector<uint32_t> delta_decoded.push_back(decoded[0]);
+        delta_decoded.push_back(decoded[0]);
         for (int i = 1; i < decoded.size(); ++i) {
             delta_decoded.push_back(decoded[i]);
         }
