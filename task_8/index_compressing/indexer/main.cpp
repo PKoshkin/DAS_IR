@@ -55,7 +55,7 @@ int main(void) {
         for (const auto& p : index) {
             const std::string& word = p.first;
             const std::vector<uint32_t>& posting = p.second;
-            const std::vector<uint32_t> delta_encoded_posting;
+            std::vector<uint32_t> delta_encoded_posting;
             delta_encoded_posting.push_back(posting[0]);
             for (int i = 1; i < posting.size(); ++i) {
                 delta_encoded_posting.push_back(posting[i] - posting[i - 1]);
