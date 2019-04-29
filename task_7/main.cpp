@@ -1,9 +1,8 @@
 #include <iostream>
-#include <stack>
-#include <vector>
 #include <vector>
 #include <climits>
-#include <bitset>
+#include <ctime>
+#include <random>
 
 
 const std::size_t HANDLING_BITS = 3;
@@ -45,6 +44,11 @@ std::vector<Byte> encode(const T* data, std::size_t count) {
     for (std::size_t i = 0; i < count; ++i) {
         add_object(data[i], bytes);
     }
+    /*
+    for (int i = 0; i < bytes.size(); ++i) {
+        std::cout << "byte[" << i << "]=" << (int)bytes[i] << std::endl;
+    }
+    */
     return bytes;
 }
 
@@ -72,21 +76,52 @@ std::vector<T> decode(const Byte* data, std::size_t length) {
     return objects;
 }
 
+
+bool test(std::size_t tests_number, std::size_t numbers_in_test, std::uint64_t max_number=UINT64_MAX) {
+    for (int i = 0; i < tests_number; ++i) {
+        std::uint64_t input_numbers[numbers_in_test];
+        for (int j = 0; j < numbers_in_test; ++j) {
+            input_numbers[j] = std::rand() % max_number;
+        }
+        std::vector<Byte> bytes = encode(input_numbers, numbers_in_test);
+        std::vector<std::uint64_t> numbers_decoded = decode<std::uint64_t>(bytes.data(), bytes.size());
+        for (int j = 0; j < numbers_in_test; ++j) {
+            if (numbers_decoded[j] != input_numbers[j]) {
+                std::cout << numbers_decoded[j] << " != " << input_numbers[j] << std::endl;
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+void print_bytes_numbers(std::size_t numbers, double step) {
+    std::random_device random;
+    std::mt19937 generator(random());
+ 
+    for (double p = step; p < 1; p += step) {
+        std::geometric_distribution<> geometric(p);
+        std::uint64_t input_numbers[numbers];
+        for (int i = 0; i < numbers; ++i) {
+            input_numbers[i] = geometric(generator);
+        }
+        std::vector<Byte> bytes = encode(input_numbers, numbers);
+        std::cout << bytes.size() << std::endl;
+    }
+}
+
 int main () {
-    std::uint64_t numbers[2];
-    std::cin >> numbers[0] >> numbers[1];
-
-
-    std::vector<Byte> bytes = encode(numbers, 2);
-    for (int i = 0; i < bytes.size(); ++i) {
-        std::cout << "Byte " << i << ": " << (int)(Byte)bytes[i] << std::endl;
+    if (!test(10, 1000)) {
+        std::cout << "test failed" << std::endl;;
     }
-    std::cout << "bytes.size(): " << bytes.size() << std::endl;
-    std::vector<std::uint64_t> number_decode = decode<std::uint64_t>(bytes.data(), bytes.size());
-    std::cout << "number_decode.size(): " << number_decode.size() << std::endl;
-    for (int i = 0; i < number_decode.size(); ++i) {
-        std::cout << "number_decode[" << i << "]: " << number_decode[i] << std::endl;
-    }
+    /*
+    std::uint64_t number;
+    std::cin >> number;
+    std::vector<Byte> bytes = encode(&number, 1);
+    std::vector<std::uint64_t> numbers_decoded = decode<std::uint64_t>(bytes.data(), bytes.size());
+    std::cout << numbers_decoded[0] << std::endl;
+    */
 
+    print_bytes_numbers(10000, 0.0000001);
     return 0;
 }
