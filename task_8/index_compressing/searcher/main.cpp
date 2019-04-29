@@ -43,19 +43,20 @@ public:
 
         const std::pair<uint32_t, uint32_t> offset_and_length = it->second;
 
-        std::vector<uint32_t> res(offset_and_length.second / sizeof(uint32_t));
+        std::vector<Byte> bytes(offset_and_length.second);
 
         index.seekg(offset_and_length.first);
-        index.read(reinterpret_cast<char*>(res.data()),
+        index.read(reinterpret_cast<Byte*>(bytes.data()),
                    offset_and_length.second);
 
-        Byte* bytes = reinterpret_cast<Byte*>(res.data());
-
-        std::vector<uint32_t> decoded = decode<uint32_t>(bytes, res.size());
-        std::vector<uint32_t> delta_decoded(decoded.size());
-        delta_decoded.push_back(decoded[0]);
+        std::vector<uint32_t> decoded = decode<uint32_t>(bytes.data(), bytes.size());
+        std::vector<uint32_t> delta_decoded;
+        uint32_t current_id = decoded[0];
+        delta_decoded.push_back(current_id);
         for (int i = 1; i < decoded.size(); ++i) {
-            delta_decoded.push_back(decoded[i]);
+            //std::cout << "first: " << decoded[0] << " delta: " << decoded[i] << " current: " << current_id << std::endl; 
+            current_id += decoded[i];
+            delta_decoded.push_back(current_id);
         }
 
         return delta_decoded;

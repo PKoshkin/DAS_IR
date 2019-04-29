@@ -65,16 +65,14 @@ int main(void) {
             const uint32_t current_position = output.tellp();
 
             output.write(
-                reinterpret_cast<const char*>(varint_encoded_posting.data()),
+                reinterpret_cast<Byte*>(varint_encoded_posting.data()),
                 varint_encoded_posting.size() * sizeof(Byte)
             );
 
             const uint32_t next_position = output.tellp();
-
             const uint32_t length = next_position - current_position;
 
-            word_to_offset_and_length[word] =
-                    std::make_pair(current_position, length);
+            word_to_offset_and_length[word] = std::make_pair(current_position, length);
         }
     }
     {
