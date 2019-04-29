@@ -62,6 +62,8 @@ int main(void) {
             }
             std::vector<Byte> varint_encoded_posting = encode(delta_encoded_posting.data(), delta_encoded_posting.size());
 
+            std::cout << word << " " << posting.size() << " " << varint_encoded_posting.size() << std::endl;
+
             const uint32_t current_position = output.tellp();
 
             output.write(

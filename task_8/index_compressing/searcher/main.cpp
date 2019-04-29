@@ -54,7 +54,6 @@ public:
         uint32_t current_id = decoded[0];
         delta_decoded.push_back(current_id);
         for (int i = 1; i < decoded.size(); ++i) {
-            //std::cout << "first: " << decoded[0] << " delta: " << decoded[i] << " current: " << current_id << std::endl; 
             current_id += decoded[i];
             delta_decoded.push_back(current_id);
         }
