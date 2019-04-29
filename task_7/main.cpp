@@ -44,11 +44,6 @@ std::vector<Byte> encode(const T* data, std::size_t count) {
     for (std::size_t i = 0; i < count; ++i) {
         add_object(data[i], bytes);
     }
-    /*
-    for (int i = 0; i < bytes.size(); ++i) {
-        std::cout << "byte[" << i << "]=" << (int)bytes[i] << std::endl;
-    }
-    */
     return bytes;
 }
 
@@ -113,15 +108,10 @@ void print_bytes_numbers(std::size_t numbers, double step) {
 int main () {
     if (!test(10, 1000)) {
         std::cout << "test failed" << std::endl;;
+    } else {
+        std::cout << "test passed!" << std::endl;;
     }
-    /*
-    std::uint64_t number;
-    std::cin >> number;
-    std::vector<Byte> bytes = encode(&number, 1);
-    std::vector<std::uint64_t> numbers_decoded = decode<std::uint64_t>(bytes.data(), bytes.size());
-    std::cout << numbers_decoded[0] << std::endl;
-    */
 
-    print_bytes_numbers(10000, 0.0000001);
+    //print_bytes_numbers(10000, 0.0000001);
     return 0;
 }
