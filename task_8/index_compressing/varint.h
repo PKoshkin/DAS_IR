@@ -7,7 +7,7 @@
 
 const std::size_t HANDLING_BITS = 3;
 const std::size_t BITS_IN_FIRST_BYTE = CHAR_BIT - HANDLING_BITS;
-typedef unsigned char Byte;
+typedef char Byte;
 
 
 template<typename T>
