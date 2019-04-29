@@ -66,16 +66,12 @@ int main(void) {
 
             output.write(
                 reinterpret_cast<const char*>(varint_encoded_posting.data()),
-                varint_encoded_posting.size() * sizeof(uint32_t)
+                varint_encoded_posting.size() * sizeof(Byte)
             );
 
             const uint32_t next_position = output.tellp();
 
             const uint32_t length = next_position - current_position;
-
-            if (length != varint_encoded_posting.size() * sizeof(uint32_t)) {
-                throw std::logic_error("error while writing index");
-            }
 
             word_to_offset_and_length[word] =
                     std::make_pair(current_position, length);
